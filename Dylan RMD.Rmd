@@ -1,0 +1,264 @@
+---
+title: "Dylan"
+author: "DZ & VS"
+date: "2023-05-02"
+output:
+  html_document: default
+---
+##Prepare the library and import the data
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(haven)
+library(tidyverse)
+library(tidyLPA)
+library(ggplot2)
+library(psych)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(officer)
+library(flextable)
+
+data<-read_sav("C:/Users/vasil/Desktop/Dylan Poulus Work/data_lpa.sav")
+
+```
+##Describe the Data
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+Dylan<-describe(data)
+DS<-summary(data)
+flextable(Dylan)
+as_flextable(DS)
+```
+
+
+
+## LPA with Mental toughness and Resilience
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+################################################################################
+##################### Models cheat sheet #######################################
+################################################################################
+#Model 1 is Equal variances and covariances fixed to 0 (CIDP) 
+#Model 2 is Varying variances and covariances fixed to 0 (CVDP) 
+#Model 3 is Equal variances and equal covariances (CIRP) 
+#Model 4 and 5 are not able to fit Mclust 
+#Model 6 is Varying variances and Varying covariances (CVUP) 
+################################################################################
+################################################################################
+
+## Initial model fit
+set.seed(123)
+data%>%
+  select("ResTotal","MT_Total")%>%
+  single_imputation()%>%
+  estimate_profiles(2:4, variances = c("equal", "varying", "equal", "varying"),
+                    covariances = c("zero", "zero", "equal", "varying"))%>%
+  compare_solutions(statistics = c("AIC","BIC","AWE", "CLC", "KIC"))
+```
+
+## Selecting best model
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+## Filtering model
+set.seed(125)
+CVUP2 <- data%>%
+  select("ResTotal","MT_Total")%>%
+  single_imputation()%>%
+  estimate_profiles(2, variances="varying",covariances="varying")
+
+set.seed(126)
+CVUP3 <- data%>%
+  select("ResTotal","MT_Total")%>%
+  single_imputation()%>%
+  estimate_profiles(3, variances="varying",covariances="varying")
+
+set.seed(127)
+CVUP4 <- data%>%
+  select("ResTotal","MT_Total")%>%
+  single_imputation()%>%
+  estimate_profiles(4, variances="varying",covariances="varying")
+
+as_tibble(rbind(CVUP2[["model_6_class_2"]][["fit"]],CVUP3[["model_6_class_3"]][["fit"]],
+                CVUP4[["model_6_class_4"]][["fit"]])) %>%
+  select(Model,Classes,LogLik,AIC,BIC,Entropy,n_min,BLRT_p)
+```
+
+## Proportion of participants en each profile
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+## Prep data
+lpa <- get_data(CVUP4)
+view(data)
+
+data1 <- data %>%
+  mutate(ResTotalz = scale(ResTotal)) %>%
+  mutate(MT_Totalz = scale(MT_Total))
+
+
+data1$Class <- as.factor(data1$Class)
+
+## Proportion of participants
+data1%>%
+  group_by(Class)%>%
+  count(Class)%>%
+  mutate(Perc = (n/453)*100)
+```
+
+## Raw and Std values
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+## Raw values
+data1%>%
+  select(Class,ResTotal,MT_Total) %>%
+  group_by(Class) %>%
+  summarise(MT_Total=mean(MT_Total),
+            ResTotal=mean(ResTotal),) %>%
+  na.omit()
+
+## Std values
+ClassProp<-data1%>%
+  select(Class,ResTotalz,MT_Totalz) %>%
+  group_by(Class) %>%
+  summarise(MT_Totalz=mean(MT_Totalz),
+            ResTotalz=mean(ResTotalz)) %>%
+  na.omit()
+as_flextable(ClassProp)
+```
+
+## Plot
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+data1%>%
+  select(Class,ResTotalz,MT_Totalz) %>%
+  group_by(Class) %>%
+  summarise(ResTotalz=mean(ResTotalz),
+            MT_Totalz=mean(MT_Totalz)) %>%
+  na.omit() %>%
+  pivot_longer(cols=c(ResTotalz,MT_Totalz), 
+             names_to="Model_Indicators",
+             values_to="Z_Scores") %>%
+  ggplot(aes(x=Model_Indicators, y=Z_Scores, group=Class, color=Class)) + 
+  geom_point(size = 1.5) + geom_line(size = 1.5) +
+  labs(x= "Model Indicators", y = "Z scores", color = "Profiles") + 
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1.0),
+        axis.title.y = element_text(face = "bold"),
+        legend.title = element_text(face = "bold"), 
+        legend.position="bottom") +
+  scale_y_continuous(breaks=seq(-2.0, 2.0, by = 0.5)) +
+  scale_x_discrete(labels=c("ResTotalz"="Resilience",
+                            "MT_Totalz"="Mental toughness")) +
+  scale_colour_discrete(labels=c("Normative","Low resilient",
+                                 "Low toughness", "High resilient")) 
+```
+
+## LPA with Burnout
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+## Initial model fit
+set.seed(132)
+data1%>%
+  select("RA","Exhaustion","Sport_Devaluation")%>%
+  single_imputation()%>%
+  estimate_profiles(2:4, variances = c("equal", "varying", "equal", "varying"),
+                    covariances = c("zero", "zero", "equal", "varying"))%>%
+  compare_solutions(statistics = c("AIC","BIC","AWE", "CLC", "KIC"))
+```
+## Filtering models
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+## Filtering model
+set.seed(135)
+CCVUP2 <- data1%>%
+  select("RA","Exhaustion","Sport_Devaluation")%>%
+  single_imputation()%>%
+  estimate_profiles(2, variances="varying",covariances="varying")
+
+set.seed(136)
+CCVUP3 <- data1%>%
+  select("RA","Exhaustion","Sport_Devaluation")%>%
+  single_imputation()%>%
+  estimate_profiles(3, variances="varying",covariances="varying")
+
+as_tibble(rbind(CCVUP2[["model_6_class_2"]][["fit"]],
+                CCVUP3[["model_6_class_3"]][["fit"]])) %>%
+  select(Model,Classes,LogLik,AIC,BIC,Entropy,n_min,BLRT_p)
+```
+
+## Proportion of participants en each profile
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+## Prep data
+lpa1 <- get_data(CCVUP3)
+```
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+data2 <- data1 %>%
+  mutate(RAz = scale(RA)) %>%
+  mutate(Exhaustionz = scale(Exhaustion)) %>%
+  mutate(Sport_Devaluationz = scale(Sport_Devaluation))
+
+data2$Burn_Class <- as.factor(data2$Burn_Class)
+
+## Proportion of participants
+data2%>%
+  group_by(Burn_Class)%>%
+  count(Burn_Class)%>%
+  mutate(Perc = (n/453)*100) %>%
+  mutate(across(where(is.numeric), round, 2))
+```
+
+## Raw and Std values
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+## Raw values
+data2%>%
+  select(Burn_Class,RA,Exhaustion,Sport_Devaluation) %>%
+  group_by(Burn_Class) %>%
+  summarise(Exhaustion=mean(Exhaustion),
+            RA=mean(RA),
+            Sport_Devaluation=mean(Sport_Devaluation)) %>%
+  na.omit()
+
+## Std values
+data2%>%
+  select(Burn_Class,RAz,Exhaustionz,Sport_Devaluationz) %>%
+  group_by(Burn_Class) %>%
+  summarise(Exhaustionz=mean(Exhaustionz),
+            RAz=mean(RAz),
+            Sport_Devaluationz=mean(Sport_Devaluationz)) %>%
+  na.omit()
+```
+
+## Plot
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+data2%>%
+  select(Burn_Class,RAz,Exhaustionz,Sport_Devaluationz) %>%
+  group_by(Burn_Class) %>%
+  summarise(RAz=mean(RAz),
+            Exhaustionz=mean(Exhaustionz),
+            Sport_Devaluationz=mean(Sport_Devaluationz)) %>%
+  na.omit() %>%
+  pivot_longer(cols=c(RAz,Exhaustionz,Sport_Devaluationz), 
+             names_to="Model_Indicators",
+             values_to="Z_Scores") %>%
+  ggplot(aes(x=Model_Indicators, y=Z_Scores, group=Burn_Class, color=Burn_Class)) + 
+  geom_point(size = 1.5) + geom_line(size = 1.5) +
+  labs(x= "Model Indicators", y = "Z scores", color = "Profiles") + 
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1.0),
+        axis.title.y = element_text(face = "bold"),
+        legend.title = element_text(face = "bold"), 
+        legend.position="bottom") +
+  scale_y_continuous(breaks=seq(-2.0, 2.0, by = 0.5)) +
+  scale_x_discrete(labels=c("RAz"="Sense of accomplishment",
+                            "Exhaustionz"="Exhaustion",
+                            "Sport_Devaluationz"="Sport devaluation")) +
+  scale_colour_discrete(labels=c("Low burnout","Normative","High accomplisment")) 
+```
+
